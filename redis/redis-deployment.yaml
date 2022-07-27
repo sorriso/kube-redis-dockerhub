@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-deployment
+  namespace: default
+  labels:
+    app: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7.0.4-bullseye
+          imagePullPolicy: Never
+          command:
+            - redis-server
+            - "/config/redis.conf"
+            - --requirepass $PASS
+          readinessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          livenessProbe:
+            tcpSocket:
+              port: 6379
+            failureThreshold: 6
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            successThreshold: 1
+            timeoutSeconds: 5
+          ports:
+          - containerPort: 6379
+            protocol: TCP
+          resources:
+            limits:
+              cpu: 500m
+              memory: 1Gi
+            requests:
+              cpu: 10m
+              memory: 512Mi
+          env:
+          - name: MASTER
+            value: "true"
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: PASS
+            valueFrom:
+              secretKeyRef:
+                name: redis-secret
+                key: REDIS-PASS
+          volumeMounts:
+            - name: redis-storage
+              mountPath: /data/
+            - name: redis-config
+              mountPath: /config/redis.conf
+              subPath: REDIS-CONFIG
+              readOnly: true
+            - name: redis-config
+              mountPath: /config/users.acl
+              subPath: ACL-CONFIG
+              readOnly: true
+      volumes:
+        - name: redis-storage
+          persistentVolumeClaim:
+            claimName: redis-volume-claim
+        - name: redis-config
+          secret:
+            secretName: redis-secret
